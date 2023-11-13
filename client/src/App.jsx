@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useThree, useFrame, extend, Canvas } from "react-three-fiber";
 import { Raycaster } from "three";
-import { Html } from "@react-three/drei";
+import { Html, useGLTF } from "@react-three/drei";
 import { io } from "socket.io-client";
+import { OrbitControls } from "@react-three/drei";
 
 extend({ Raycaster });
 const socket = io("ws://localhost:3500");
@@ -40,7 +41,7 @@ const useRaycaster = (onClick) => {
 function Dot({ position }) {
   return (
     <mesh position={position}>
-      <circleGeometry args={[0.05, 16]} />
+      <sphereGeometry args={[1, 16]} />
       <meshBasicMaterial color={0xff0000} />
     </mesh>
   );
@@ -52,12 +53,14 @@ function Cube(redDots) {
   const [dots, setDots] = useState([redDots]); // Add state to store dots
   const { handleClick, handleUnclick, clickedPoint } = useRaycaster(
     (clickedPoint) => {
-      console.log(clickedPoint);
+      // console.log(clickedPoint);
       setTextBoxOpen(true);
     }
   );
+  const { scene } = useGLTF("./p_001.glb");
 
   const handleCloseTextBox = () => {
+    setTypedText("");
     setTextBoxOpen(false);
   };
 
@@ -76,36 +79,41 @@ function Cube(redDots) {
     handleCloseTextBox();
 
     socket.on("message", (data) => {
-      // Update dots and text based on the data received
-      setDots((prevDots) => [...prevDots, data.point]);
-      // Update text logic if needed
-      console.log(data);
+      if (data.type === "data") {
+        // Update dots based on the data received
+        setDots((prevDots) => {
+          console.log("prevDots: ", ...prevDots);
+          return [...prevDots, data.point];
+        });
+        console.log(dots);
+      }
     });
   };
 
   return (
     <mesh onClick={handleClick} onPointerUp={handleUnclick}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial color={0x00ff00} />
+      <primitive object={scene} />
       {isTextBoxOpen && (
-        <Html>
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-            }}
-          >
-            <input
-              type="text"
-              value={typedText}
-              onChange={handleTextChange}
-              placeholder="Type here"
-            />
-            <button onClick={handleSendData}>Send</button>
-          </div>
-        </Html>
+        <>
+          <Html>
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <input
+                type="text"
+                value={typedText}
+                onChange={handleTextChange}
+                placeholder="Type here"
+              />
+              <button onClick={handleSendData}>Send</button>
+            </div>
+          </Html>
+        </>
       )}
       {dots && dots.map((dot, index) => <Dot key={index} position={dot} />)}
     </mesh>
@@ -114,11 +122,22 @@ function Cube(redDots) {
 
 function App() {
   // Listen for messages from the server
+  useEffect(() => {
+    socket.connect();
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const [data, setData] = useState({});
 
   return (
     <div style={{ height: "100vh" }}>
-      <Canvas>
-        <Cube />
+      <Canvas camera={{ fov: 75, position: [-10, 45, 250] }}>
+        <ambientLight intensity={1} />
+        <Cube data={{ data, setData }} />
+        <OrbitControls />
       </Canvas>
     </div>
   );
